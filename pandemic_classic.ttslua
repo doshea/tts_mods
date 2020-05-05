@@ -1,0 +1,176 @@
+--[[ Lua code. See documentation: http://berserk-games.com/knowledgebase/scripting/ --]]
+-- GAME CONSTANTS
+PLAYER_NUMBER = 2
+
+DIFFICULTIES = {easy = 4, medium = 5, hard = 6}
+DEFAULT_DIFFICULTY = 'medium'
+current_difficulty = DIFFICULTIES[DEFAULT_DIFFICULTY]
+
+-- DECLARE IDs
+THE_BOARD_ID = 'cf3778'
+WHITE_TOKEN_ID = '11cba0'
+PLAYER_DECK_ID = 'db60e9'
+INFECTION_DECK_ID = '067e7b'
+EPIDEMIC_DECK_ID = '9b5e1f'
+ROLE_DECK_ID = '3dc535'
+
+RED_LIGHT_ID = '074583'
+YELLOW_LIGHT_ID = '9e95a2'
+GREEN_LIGHT_ID = 'eded3b'
+
+-- DECLARE COLORS
+BLACK_COLOR = {0,0,0}
+DARK_GREY_COLOR = {0.2, 0.2, 0.2}
+MEDIUM_GREY_COLOR = {0.5, 0.5, 0.5}
+LIGHT_GREY_COLOR = {0.8, 0.8, 0.8}
+WHITE_COLOR = {1, 1, 1}
+INVISIBLE_COLOR = {0,0,0,0}
+
+--[[ The OnLoad function. This is called after everything in the game save finishes loading.
+Most of your script code goes here. --]]
+function onload()
+    print 'GAME LOADED'
+    -- DECLARE OBJECTS
+    the_board = getObjectFromGUID(THE_BOARD_ID)
+    white_token = getObjectFromGUID(WHITE_TOKEN_ID)
+    player_deck = getObjectFromGUID(PLAYER_DECK_ID)
+    infection_deck = getObjectFromGUID(INFECTION_DECK_ID)
+    epidemic_deck = getObjectFromGUID(EPIDEMIC_DECK_ID)
+    role_deck = getObjectFromGUID(ROLE_DECK_ID)
+
+    red_light = getObjectFromGUID(RED_LIGHT_ID)
+    yellow_light = getObjectFromGUID(YELLOW_LIGHT_ID)
+    green_light = getObjectFromGUID(GREEN_LIGHT_ID)
+
+    yellow_light.interactable = false
+    green_light.interactable = false
+
+    red_light.highlightOn(WHITE_COLOR)
+    red_light.createButton({
+      click_function = 'shuffle_and_deal',
+      function_owner = self,
+      label          = "READY",
+      position = {0, 0, -1},
+      rotation = {0, 180, 0},
+      scale = {0.5, 0.5, 0.5},
+      width = 2000,
+      height = 400,
+      font_size = 400,
+      color = {0.7573, 0.7573, 0.7573, 1},
+      font_color     = BLACK_COLOR,
+      hover_color    = LIGHT_GREY_COLOR,
+      press_color    = DARK_GREY_COLOR,
+      tooltip = "Do not press until all players are seated"
+    })
+
+    role_deck.highlight_on(WHITE_COLOR)
+    -- deal_starting_cards()
+    -- intermingle_epidemics()
+    -- for i = 1,CURRENT_DIFFICULTY do
+    --   current_player_deck = split_decks[i]
+    --   epidemic_deck.takeObject({
+    --     callback_function = function(obj)
+    --       current_player_deck.putObject(obj)
+    --     end
+    --   })
+    -- end
+
+    -- Syncs all players' music then starts playlist
+    startLuaCoroutine(self, "start_the_music")
+
+    print '== SETUP COMPLETE =='
+end
+
+--[[ The Update function. This is called once per frame. --]]
+function update ()
+    --[[ print('Update loop!') --]]
+end
+
+function start_the_music ()
+  --Wait for everyone to load the audioclip.
+  while MusicPlayer.loaded == false do
+      coroutine.yield(0)
+  end
+  --Play audioclip.
+  MusicPlayer.play()
+  return 1 -- coroutines must ALWAYS return 1 or they error
+end
+
+function shuffle_and_deal()
+  red_light.removeButton(0)
+  toggle_button(red_light)
+  infection_deck.shuffle()
+  role_deck.shuffle()
+  player_deck.shuffle()
+  player_deck.deal(math.floor(9/PLAYER_NUMBER))
+
+  toggle_button(yellow_light)
+  yellow_light.createButton({
+    click_function = 'initial_infect',
+    function_owner = self,
+    label          = "SET",
+    position = {0, 0, -1},
+    rotation = {0, 180, 0},
+    scale = {0.5, 0.5, 0.5},
+    width = 2000,
+    height = 400,
+    font_size = 400,
+    color = {0.7573, 0.7573, 0.7573, 1},
+    font_color     = BLACK_COLOR,
+    hover_color    = LIGHT_GREY_COLOR,
+    press_color    = DARK_GREY_COLOR,
+    tooltip = "SET"
+  })
+  intermingle_epidemics()
+end
+
+
+function intermingle_epidemics()
+  split_decks = player_deck.split(current_difficulty)
+  local epidemic_mixer = function()
+    local epidemics_hidden = 0
+    for i, split_deck in ipairs(split_decks) do
+      print(i)
+      print(split_deck.guid)
+      epidemic_deck.takeObject({
+        callback_function = function(obj)
+          split_deck.putObject(obj)
+          split_deck.shuffle()
+          epidemics_hidden = epidemics_hidden+1
+          if (split_deck ~= player_deck) then
+            player_deck.putObject(split_deck)
+          end
+        end,
+        smooth            = false
+      })
+    end
+    local epidemic_cleanup = function() epidemic_deck.destruct() end
+    local epidemics_are_hidden = function() return (epidemics_hidden == current_difficulty) end
+    -- Wait.condition(epidemic_cleanup, epidemics_are_hidden)
+  end
+  local splitting_is_complete = function() return (split_decks[1] ~= nil) end
+  Wait.condition(epidemic_mixer, splitting_is_complete)
+end
+
+function initial_infect()
+  yellow_light.removeButton(0)
+  toggle_button(green_light)
+  toggle_button(yellow_light)
+end
+function get_going()
+
+end
+function toggle_button(button)
+  current_color = button.getColorTint()
+  if current_color[4] > 0 then
+    current_color[4] = 0
+    button.setColorTint(current_color)
+    button.interactable = false
+    button.highlightOff()
+  else
+    current_color[4] = 1
+    button.setColorTint(current_color)
+    button.interactable = true
+    button.highlightOn(WHITE_COLOR)
+  end
+end
